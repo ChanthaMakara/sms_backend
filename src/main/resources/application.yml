@@ -1,0 +1,38 @@
+spring:
+  application:
+    name: mission-management-backend
+
+  datasource:
+    url: jdbc:sqlserver://localhost:1433;databaseName=mission_db;encrypt=true;trustServerCertificate=true
+    username: sa
+    password: Mission@Strong123
+    driver-class-name: com.microsoft.sqlserver.jdbc.SQLServerDriver
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+        dialect: org.hibernate.dialect.SQLServerDialect
+
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    ignore-migration-patterns: "*:missing"
+    locations: classpath:db/migration
+
+server:
+  port: 8080
+
+springdoc:
+  api-docs:
+    path: /api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    operations-sorter: method
+
+jwt:
+  secret: FAKESECRET_c1d2e3f4g5h6i7j8k9l0x
+  expiration: 86400000

@@ -1,0 +1,8 @@
+spring:
+  datasource:
+    url: jdbc:sqlserver://localhost:1433;databaseName=mission_db;encrypt=true;trustServerCertificate=true
+    username: sa
+    password: Mission@Strong123
+
+  jpa:
+    show-sql: true

@@ -2,10 +2,13 @@ package com.onemore.mission.analytics.service
 
 import com.onemore.mission.analytics.dto.response.AllowanceSpendResponse
 import com.onemore.mission.analytics.dto.response.ApprovalTurnaroundResponse
+import com.onemore.mission.analytics.dto.response.DepartmentMissionCount
+import com.onemore.mission.analytics.dto.response.ExceptionItem
 import com.onemore.mission.analytics.dto.response.ExceptionsResponse
 import com.onemore.mission.analytics.dto.response.MissionsSummaryResponse
-import com.onemore.mission.analytics.dto.response.RejectedMission
-import com.onemore.mission.analytics.dto.response.StuckMission
+import com.onemore.mission.analytics.dto.response.MonthlyMissionTrend
+import com.onemore.mission.analytics.dto.response.MonthlySpend
+import com.onemore.mission.analytics.dto.response.StageTurnaround
 import com.onemore.mission.approval.domain.ApprovalDecision
 import com.onemore.mission.approval.repository.ApprovalHistoryRepository
 import com.onemore.mission.mission.domain.MissionStatus
@@ -28,37 +31,61 @@ class AnalyticsService(
             MissionStatus.CANCELLED,
             MissionStatus.SETTLED
         )
+        private val PENDING_STATUSES = setOf(
+            MissionStatus.SUBMITTED,
+            MissionStatus.FM_REVIEW,
+            MissionStatus.HRBP_REVIEW,
+            MissionStatus.FINANCE_REVIEW,
+            MissionStatus.BIZOPS_REVIEW,
+            MissionStatus.EXECUTIVE_REVIEW
+        )
         private const val STUCK_THRESHOLD_DAYS = 5L
+        private const val SLA_HOURS_THRESHOLD = 24.0
     }
 
     fun getMissionsSummary(): MissionsSummaryResponse {
         val counts = missionRepository.countByStatusGrouped()
+        val byStatus = counts.associate { it.status to it.count }
 
-        val byStatus = counts.associate { it.status.name to it.count }
-        val totalMissions = counts.sumOf { it.count }
+        val total = counts.sumOf { it.count }
+        val pending = PENDING_STATUSES.sumOf { byStatus[it] ?: 0L }
+        val approved = byStatus[MissionStatus.APPROVED] ?: 0L
+        val completed = (byStatus[MissionStatus.SETTLED] ?: 0L) + (byStatus[MissionStatus.REPORT_SUBMITTED] ?: 0L)
+        val rejected = byStatus[MissionStatus.REJECTED] ?: 0L
 
         return MissionsSummaryResponse(
-            totalMissions = totalMissions,
-            byStatus = byStatus
+            total = total,
+            pending = pending,
+            approved = approved,
+            inProgress = pending, // TODO: decide how "in progress" should differ from "pending"
+            completed = completed,
+            rejected = rejected,
+            changeVsLastMonthPct = 0.0, // TODO: needs a month-over-month comparison query
+            trend = emptyList(), // TODO: needs a query grouping missions by month
+            byDepartment = emptyList() // TODO: no "department" field exists yet
         )
     }
 
     fun getAllowanceSpend(): AllowanceSpendResponse {
-        val statuses = listOf(MissionStatus.APPROVED, MissionStatus.SETTLED)
-        val rows = missionRepository.sumAllowanceByBusiness(statuses)
+        val settledStatuses = listOf(MissionStatus.APPROVED, MissionStatus.SETTLED)
+        val settledRows = missionRepository.sumAllowanceByBusiness(settledStatuses)
+        val totalSpend = settledRows.fold(BigDecimal.ZERO) { acc, row -> acc + row.total }
 
-        val byBusiness = rows.associate { it.business to it.total }
-        val totalSpend = rows.fold(BigDecimal.ZERO) { acc, row -> acc + row.total }
+        val pendingRows = missionRepository.sumAllowanceByBusiness(listOf(MissionStatus.REPORT_SUBMITTED))
+        val pendingSettlement = pendingRows.fold(BigDecimal.ZERO) { acc, row -> acc + row.total }
 
         return AllowanceSpendResponse(
+            currency = "USD", // TODO: pull from config once multi-currency support exists
             totalSpend = totalSpend,
-            byBusiness = byBusiness
+            budget = BigDecimal.ZERO, // TODO: no budget figure exists in the data model yet
+            pendingSettlement = pendingSettlement,
+            changeVsLastMonthPct = 0.0, // TODO: needs a month-over-month comparison query
+            monthly = emptyList() // TODO: needs a query grouping allowance totals by month
         )
     }
 
     fun getApprovalTurnaround(): ApprovalTurnaroundResponse {
         val allHistory = approvalHistoryRepository.findAllByOrderByMissionIdAscDecidedAtAsc()
-
         val byMission = allHistory.groupBy { it.missionId }
 
         val hoursByStep = mutableMapOf<String, MutableList<Double>>()
@@ -78,61 +105,83 @@ class AnalyticsService(
             }
         }
 
-        val averageHoursByStep = hoursByStep.mapValues { (_, durations) ->
-            durations.average()
+        val byStage = hoursByStep.map { (step, durations) ->
+            StageTurnaround(stage = step, hours = durations.average())
         }
 
-        val overallAverageHours = if (allDurations.isNotEmpty()) allDurations.average() else 0.0
+        val averageHours = if (allDurations.isNotEmpty()) allDurations.average() else 0.0
+        val medianHours = if (allDurations.isNotEmpty()) median(allDurations) else 0.0
+        val withinSlaPct = if (allDurations.isNotEmpty())
+            allDurations.count { it <= SLA_HOURS_THRESHOLD } * 100.0 / allDurations.size
+        else 0.0
+
+        // TODO: requires comparing against last month's approval history once that query exists
+        val changeVsLastMonthPct = 0.0
 
         return ApprovalTurnaroundResponse(
-            averageHoursByStep = averageHoursByStep,
-            overallAverageHours = overallAverageHours
+            averageHours = averageHours,
+            medianHours = medianHours,
+            withinSlaPct = withinSlaPct,
+            changeVsLastMonthPct = changeVsLastMonthPct,
+            byStage = byStage
         )
+    }
+
+    private fun median(values: List<Double>): Double {
+        val sorted = values.sorted()
+        val mid = sorted.size / 2
+        return if (sorted.size % 2 == 0) (sorted[mid - 1] + sorted[mid]) / 2.0 else sorted[mid]
     }
 
     fun getExceptions(): ExceptionsResponse {
         val allMissions = missionRepository.findAll()
         val allHistory = approvalHistoryRepository.findAllByOrderByMissionIdAscDecidedAtAsc()
         val historyByMission = allHistory.groupBy { it.missionId }
-
         val now = Instant.now()
 
-        val stuckMissions = allMissions
+        val stuckItems = allMissions
             .filter { it.status !in FINAL_STATUSES }
             .mapNotNull { mission ->
                 val missionHistory = historyByMission[mission.id]
                 val lastActivityAt = missionHistory?.maxByOrNull { it.decidedAt }?.decidedAt
                     ?: mission.createdAt
-
                 val daysSince = Duration.between(lastActivityAt, now).toDays()
 
                 if (daysSince >= STUCK_THRESHOLD_DAYS) {
-                    StuckMission(
-                        missionId = mission.id,
-                        missionCode = mission.missionCode,
-                        status = mission.status.name,
-                        lastActivityAt = lastActivityAt,
-                        daysSinceLastActivity = daysSince
+                    ExceptionItem(
+                        id = "stuck-${mission.id}",
+                        missionReference = mission.missionCode ?: "MSN-${mission.id}",
+                        type = "Stuck in review",
+                        severity = if (daysSince >= STUCK_THRESHOLD_DAYS * 2) "HIGH" else "MEDIUM",
+                        message = "No activity for $daysSince days while in ${mission.status.name}.",
+                        raisedAt = lastActivityAt
                     )
                 } else null
             }
 
-        val rejectedMissions = allMissions
+        val rejectedItems = allMissions
             .filter { it.status == MissionStatus.REJECTED }
             .map { mission ->
                 val rejectionDecision = historyByMission[mission.id]
                     ?.lastOrNull { it.decision == ApprovalDecision.REJECTED }
+                val rejectedAt = rejectionDecision?.decidedAt ?: mission.updatedAt
 
-                RejectedMission(
-                    missionId = mission.id,
-                    missionCode = mission.missionCode,
-                    rejectedAt = rejectionDecision?.decidedAt ?: mission.updatedAt
+                ExceptionItem(
+                    id = "rejected-${mission.id}",
+                    missionReference = mission.missionCode ?: "MSN-${mission.id}",
+                    type = "Rejected",
+                    severity = "LOW",
+                    message = "Mission was rejected during the approval chain.",
+                    raisedAt = rejectedAt
                 )
             }
 
+        val items = (stuckItems + rejectedItems).sortedByDescending { it.raisedAt }
+
         return ExceptionsResponse(
-            stuckMissions = stuckMissions,
-            rejectedMissions = rejectedMissions
+            open = stuckItems.size.toLong(),
+            changeVsLastMonthPct = 0.0, // TODO: needs a month-over-month comparison query
+            items = items
         )
     }
 }

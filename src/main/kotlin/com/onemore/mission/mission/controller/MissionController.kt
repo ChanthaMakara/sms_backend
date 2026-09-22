@@ -1,6 +1,5 @@
 package com.onemore.mission.mission.controller
 
-import com.onemore.mission.common.response.ApiResponse
 import com.onemore.mission.mission.dto.request.CreateMissionRequest
 import com.onemore.mission.mission.dto.request.UpdateMissionRequest
 import com.onemore.mission.mission.dto.response.MissionResponse
@@ -28,7 +27,8 @@ class MissionController(
         val response = missionService.create(
             request = request,
             requesterId = userDetails.id,
-            requesterName = userDetails.fullName
+            requesterName = userDetails.fullName,
+            callerRoles = userDetails.authorities.map { it.authority }
         )
 
         return ResponseEntity.ok(response)
@@ -55,11 +55,32 @@ class MissionController(
     @PutMapping("/{id}")
     fun update(
         @PathVariable id: Long,
-        @Valid @RequestBody request: UpdateMissionRequest
+        @Valid @RequestBody request: UpdateMissionRequest,
+        @AuthenticationPrincipal userDetails: CustomUserDetails
     ): ResponseEntity<MissionResponse> {
 
         return ResponseEntity.ok(
-            missionService.update(id, request)
+            missionService.update(
+                id = id,
+                request = request,
+                callerId = userDetails.id,
+                callerRoles = userDetails.authorities.map { it.authority }
+            )
         )
+    }
+
+    @DeleteMapping("/{id}")
+    fun delete(
+        @PathVariable id: Long,
+        @AuthenticationPrincipal userDetails: CustomUserDetails
+    ): ResponseEntity<Void> {
+
+        missionService.delete(
+            id = id,
+            callerId = userDetails.id,
+            callerRoles = userDetails.authorities.map { it.authority }
+        )
+
+        return ResponseEntity.noContent().build()
     }
 }

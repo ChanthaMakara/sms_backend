@@ -44,5 +44,7 @@ data class CreateMissionRequest(
     @field:Min(1)
     val numberOfTravelDays: Int,
 
-    val description: String? = null
+    val description: String? = null,
+
+    val onBehalfOfUserId: Long? = null
 )

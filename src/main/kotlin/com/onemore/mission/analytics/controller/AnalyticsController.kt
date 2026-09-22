@@ -5,7 +5,6 @@ import com.onemore.mission.analytics.dto.response.ApprovalTurnaroundResponse
 import com.onemore.mission.analytics.dto.response.ExceptionsResponse
 import com.onemore.mission.analytics.dto.response.MissionsSummaryResponse
 import com.onemore.mission.analytics.service.AnalyticsService
-import com.onemore.mission.common.response.ApiResponse
 import org.springframework.http.ResponseEntity
 import org.springframework.security.access.prepost.PreAuthorize
 import org.springframework.web.bind.annotation.GetMapping
@@ -19,26 +18,22 @@ class AnalyticsController(
     private val analyticsService: AnalyticsService
 ) {
     @GetMapping("/missions/summary")
-    fun getMissionsSummary(): ResponseEntity<ApiResponse<MissionsSummaryResponse>> {
-        val result = analyticsService.getMissionsSummary()
-        return ResponseEntity.ok(ApiResponse.success(result))
+    fun getMissionsSummary(): ResponseEntity<MissionsSummaryResponse> {
+        return ResponseEntity.ok(analyticsService.getMissionsSummary())
     }
 
     @GetMapping("/allowances/spend")
-    fun getAllowanceSpend(): ResponseEntity<ApiResponse<AllowanceSpendResponse>> {
-        val result = analyticsService.getAllowanceSpend()
-        return ResponseEntity.ok(ApiResponse.success(result))
+    fun getAllowanceSpend(): ResponseEntity<AllowanceSpendResponse> {
+        return ResponseEntity.ok(analyticsService.getAllowanceSpend())
     }
 
     @GetMapping("/approvals/turnaround")
-    fun getApprovalTurnaround(): ResponseEntity<ApiResponse<ApprovalTurnaroundResponse>> {
-        val result = analyticsService.getApprovalTurnaround()
-        return ResponseEntity.ok(ApiResponse.success(result))
+    fun getApprovalTurnaround(): ResponseEntity<ApprovalTurnaroundResponse> {
+        return ResponseEntity.ok(analyticsService.getApprovalTurnaround())
     }
 
     @GetMapping("/exceptions")
-    fun getExceptions(): ResponseEntity<ApiResponse<ExceptionsResponse>> {
-        val result = analyticsService.getExceptions()
-        return ResponseEntity.ok(ApiResponse.success(result))
+    fun getExceptions(): ResponseEntity<ExceptionsResponse> {
+        return ResponseEntity.ok(analyticsService.getExceptions())
     }
 }

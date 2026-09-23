@@ -20,7 +20,16 @@ class AuthService(
         )
 
         val userDetails = authentication.principal as CustomUserDetails
-        val token = jwtService.generateToken(userDetails)
+
+        // Extra claims we want inside the JWT
+        val extraClaims = mapOf(
+            "userId" to userDetails.id,
+            "fullName" to userDetails.fullName,
+            "jobLevel" to userDetails.jobLevel.name,   // or .toString() if it's an enum
+            "roles" to userDetails.authorities.map { it.authority }
+        )
+
+        val token = jwtService.generateToken(extraClaims, userDetails)
 
         return LoginResponse(
             token = token,

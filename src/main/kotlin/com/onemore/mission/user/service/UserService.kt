@@ -2,11 +2,14 @@ package com.onemore.mission.user.service
 
 import com.onemore.mission.common.exception.BusinessException
 import com.onemore.mission.common.exception.ResourceNotFoundException
+import com.onemore.mission.common.response.PageResponse
 import com.onemore.mission.user.dto.request.CreateUserRequest
 import com.onemore.mission.user.dto.request.UpdateUserRequest
 import com.onemore.mission.user.dto.response.UserResponse
 import com.onemore.mission.user.mapper.UserMapper
 import com.onemore.mission.user.repository.UserRepository
+import org.springframework.data.domain.PageRequest
+import org.springframework.data.domain.Sort
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.Instant
@@ -32,9 +35,16 @@ class UserService(
     }
 
     @Transactional(readOnly = true)
-    fun getAllUsers(): List<UserResponse> {
-        return userRepository.findAll()
+    fun getAllUsers(page: Int, pageSize: Int, search: String?): PageResponse<UserResponse> {
+        val safePage = if (page < 1) 1 else page
+        val safeSize = if (pageSize < 1) 10 else pageSize.coerceAtMost(100)
+        val pageable = PageRequest.of(safePage - 1, safeSize, Sort.by(Sort.Direction.DESC, "createdAt"))
+
+        val normalizedSearch = search?.trim()?.ifBlank { null }
+        val result = userRepository.search(normalizedSearch, pageable)
             .map { userMapper.toResponse(it) }
+
+        return PageResponse.from(result, safePage)
     }
 
     @Transactional(readOnly = true)

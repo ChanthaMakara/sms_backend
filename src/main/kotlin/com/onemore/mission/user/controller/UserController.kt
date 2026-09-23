@@ -1,6 +1,7 @@
 package com.onemore.mission.user.controller
 
 import com.onemore.mission.common.response.ApiResponse
+import com.onemore.mission.common.response.PageResponse
 import com.onemore.mission.user.dto.request.CreateUserRequest
 import com.onemore.mission.user.dto.request.UpdateUserRequest
 import com.onemore.mission.user.dto.response.UserResponse
@@ -25,8 +26,12 @@ class UserController(
     }
 
     @GetMapping
-    fun getAllUsers(): ResponseEntity<ApiResponse<List<UserResponse>>> {
-        val result = userService.getAllUsers()
+    fun getAllUsers(
+        @RequestParam(defaultValue = "1") page: Int,
+        @RequestParam(defaultValue = "10") pageSize: Int,
+        @RequestParam(required = false) search: String?
+    ): ResponseEntity<ApiResponse<PageResponse<UserResponse>>> {
+        val result = userService.getAllUsers(page, pageSize, search)
         return ResponseEntity.ok(ApiResponse.success(result))
     }
 

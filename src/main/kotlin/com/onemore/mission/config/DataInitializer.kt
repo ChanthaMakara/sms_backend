@@ -15,36 +15,36 @@ class DataInitializer(
 ) : CommandLineRunner {
 
     override fun run(vararg args: String?) {
-        if (userRepository.count() == 0L) {
-            val admin = User(
-                employeeCode = "ADMIN001",
-                fullName = "System Admin",
-                email = "admin@onemore.com",
-                passwordHash = passwordEncoder.encode("admin123"),
-                jobLevel = JobLevel.EXECUTIVE,
-                functionName = "IT",
-                business = "ONE MORE",
-                roles = mutableSetOf(UserRole.ROLE_ADMIN, UserRole.ROLE_EXECUTIVE)
+        if (!userRepository.existsByEmail("admin@onemore.com")) {
+            userRepository.save(
+                User(
+                    employeeCode = "ADMIN001",
+                    fullName = "System Admin",
+                    email = "admin@onemore.com",
+                    passwordHash = passwordEncoder.encode("admin123"),
+                    jobLevel = JobLevel.EXECUTIVE,
+                    functionName = "IT",
+                    business = "ONE MORE",
+                    roles = mutableSetOf(UserRole.ROLE_ADMIN, UserRole.ROLE_EXECUTIVE)
+                )
             )
+            println("Admin created → admin@onemore.com | admin123")
+        }
 
-            val employee = User(
-                employeeCode = "EMP001",
-                fullName = "John Doe",
-                email = "employee@onemore.com",
-                passwordHash = passwordEncoder.encode("emp123"),
-                jobLevel = JobLevel.STAFF,
-                functionName = "Sales",
-                business = "ONE MORE",
-                roles = mutableSetOf(UserRole.ROLE_STAFF)
+        if (!userRepository.existsByEmail("employee@onemore.com")) {
+            userRepository.save(
+                User(
+                    employeeCode = "EMP001",
+                    fullName = "John Doe",
+                    email = "employee@onemore.com",
+                    passwordHash = passwordEncoder.encode("emp123"),
+                    jobLevel = JobLevel.STAFF,
+                    functionName = "Sales",
+                    business = "ONE MORE",
+                    roles = mutableSetOf(UserRole.ROLE_STAFF)
+                )
             )
-
-            userRepository.save(admin)
-            userRepository.save(employee)
-
-            println("===== Sample users created =====")
-            println("Admin    → email: admin@onemore.com    | password: admin123")
-            println("Employee → email: employee@onemore.com | password: emp123")
-            println("================================")
+            println("Employee created → employee@onemore.com | emp123")
         }
     }
 }

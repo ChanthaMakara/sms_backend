@@ -58,7 +58,6 @@ class VehicleRequestController(
 
         val result =
             vehicleRequestService.getVehicleRequestById(
-                missionId,
                 vehicleRequestId
             )
 

@@ -1,16 +1,17 @@
 package com.onemore.mission.report.service
 
-import com.onemore.mission.report.dto.request.ActivityReportCommentRequest
-import com.onemore.mission.security.CustomUserDetails
-import com.onemore.mission.user.domain.UserRole
-import java.time.LocalDate
 import com.onemore.mission.report.domain.ActivityReport
+import com.onemore.mission.report.domain.ActivityReportStatus
+import com.onemore.mission.report.dto.request.ActivityReportCommentRequest
 import com.onemore.mission.report.dto.request.CreateActivityReportRequest
 import com.onemore.mission.report.dto.response.ActivityReportResponse
 import com.onemore.mission.report.mapper.ActivityReportMapper
 import com.onemore.mission.report.repository.ActivityReportRepository
+import com.onemore.mission.security.CustomUserDetails
+import com.onemore.mission.user.domain.UserRole
 import org.springframework.stereotype.Service
 import java.time.Instant
+import java.time.LocalDate
 
 @Service
 class ActivityReportService(
@@ -54,6 +55,23 @@ class ActivityReportService(
             .map(activityReportMapper::toResponse)
     }
 
+    fun getAllReports(): List<ActivityReportResponse> {
+        return activityReportRepository
+            .findAll()
+            .sortedByDescending { it.createdAt }
+            .map(activityReportMapper::toResponse)
+    }
+
+    fun updateStatus(reportId: Long, status: String): ActivityReportResponse {
+        val report = activityReportRepository.findById(reportId)
+            .orElseThrow { IllegalArgumentException("Activity report not found: $reportId") }
+
+        report.status = parseStatus(status)
+        report.updatedAt = Instant.now()
+
+        return activityReportMapper.toResponse(activityReportRepository.save(report))
+    }
+
     fun addComment(
         reportId: Long,
         request: ActivityReportCommentRequest,
@@ -80,10 +98,18 @@ class ActivityReportService(
             }
         }
 
-        report.updatedAt = java.time.Instant.now()
+        report.updatedAt = Instant.now()
 
         return activityReportMapper.toResponse(
             activityReportRepository.save(report)
         )
+    }
+
+    private fun parseStatus(value: String): ActivityReportStatus {
+        return try {
+            ActivityReportStatus.valueOf(value.uppercase())
+        } catch (ex: IllegalArgumentException) {
+            throw IllegalArgumentException("Invalid status: $value")
+        }
     }
 }

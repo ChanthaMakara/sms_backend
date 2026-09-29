@@ -2,9 +2,10 @@ package com.onemore.mission.settlement.controller
 
 import com.onemore.mission.common.response.ApiResponse
 import com.onemore.mission.settlement.dto.request.SettleMissionRequest
+import com.onemore.mission.settlement.dto.request.UpdateSettlementStatusRequest
 import com.onemore.mission.settlement.dto.response.SettlementResponse
 import com.onemore.mission.settlement.service.SettlementService
-import com.onemore.mission.security.CustomUserDetails   // adjust package if different
+import com.onemore.mission.security.CustomUserDetails
 import org.springframework.http.HttpStatus
 import org.springframework.security.core.annotation.AuthenticationPrincipal
 import org.springframework.web.bind.annotation.*

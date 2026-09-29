@@ -26,16 +26,13 @@ class SettlementService(
 
     @Transactional
     fun settleMission(missionId: Long, request: SettleMissionRequest, settledBy: Long?): SettlementResponse {
-        // 1. Check mission exists
         val mission = missionRepository.findById(missionId)
             .orElseThrow { ResourceNotFoundException("Mission not found with id: $missionId") }
 
-        // 2. Prevent double settlement
         if (settlementRepository.existsByMissionId(missionId)) {
             throw BusinessException("Mission $missionId is already settled")
         }
 
-        // 3. Calculate total allowance from Mission DSA fields
         val totalAllowance = listOfNotNull(
             mission.breakfastTotal,
             mission.lunchTotal,
@@ -43,23 +40,20 @@ class SettlementService(
             mission.accommodationTotal
         ).fold(BigDecimal.ZERO) { acc, value -> acc.add(value) }
 
-        // 4. Calculate total mileage claim
         val mileageClaims = mileageClaimRepository.findByMissionId(missionId)
         val totalMileageClaim = mileageClaims
             .map { it.totalClaimAmount }
             .fold(BigDecimal.ZERO) { acc, value -> acc.add(value) }
 
-        // 5. Grand total
         val grandTotal = totalAllowance.add(totalMileageClaim)
 
-        // 6. Create Settlement
         val now = Instant.now()
         val settlement = Settlement(
             missionId = missionId,
             totalAllowance = totalAllowance,
             totalMileageClaim = totalMileageClaim,
             grandTotal = grandTotal,
-            status = SettlementStatus.SETTLED,
+            status = SettlementStatus.PAID,
             settledAt = now,
             settledBy = settledBy,
             notes = request.notes,
@@ -69,7 +63,6 @@ class SettlementService(
 
         val saved = settlementRepository.save(settlement)
 
-        // 7. Update Mission status to SETTLED
         mission.status = MissionStatus.SETTLED
         mission.updatedAt = now
         missionRepository.save(mission)
@@ -79,7 +72,6 @@ class SettlementService(
 
     @Transactional(readOnly = true)
     fun getSettlementByMissionId(missionId: Long): SettlementResponse {
-        // Optional: check mission exists first
         if (!missionRepository.existsById(missionId)) {
             throw ResourceNotFoundException("Mission not found with id: $missionId")
         }
@@ -88,5 +80,35 @@ class SettlementService(
             .orElseThrow { ResourceNotFoundException("Settlement not found for mission id: $missionId") }
 
         return settlementMapper.toResponse(settlement)
+    }
+
+    @Transactional(readOnly = true)
+    fun getAllSettlements(): List<SettlementResponse> {
+        return settlementRepository.findAll()
+            .sortedByDescending { it.createdAt }
+            .map { settlementMapper.toResponse(it) }
+    }
+
+    @Transactional
+    fun updateStatus(id: Long, status: String): SettlementResponse {
+        val entity = settlementRepository.findById(id)
+            .orElseThrow { ResourceNotFoundException("Settlement not found: $id") }
+
+        entity.status = parseStatus(status)
+        entity.updatedAt = Instant.now()
+
+        if (entity.status == SettlementStatus.PAID && entity.settledAt == null) {
+            entity.settledAt = Instant.now()
+        }
+
+        return settlementMapper.toResponse(settlementRepository.save(entity))
+    }
+
+    private fun parseStatus(value: String): SettlementStatus {
+        return try {
+            SettlementStatus.valueOf(value.uppercase())
+        } catch (ex: IllegalArgumentException) {
+            throw IllegalArgumentException("Invalid status: $value")
+        }
     }
 }

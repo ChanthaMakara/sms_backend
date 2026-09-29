@@ -29,6 +29,7 @@ class ActivityReportMapper {
             functionManagerSignatureDate = report.functionManagerSignatureDate,
             bizOpsComment = report.bizOpsComment,
             bizOpsSignatureDate = report.bizOpsSignatureDate,
+            status = report.status.name,
             createdAt = report.createdAt,
             updatedAt = report.updatedAt
         )

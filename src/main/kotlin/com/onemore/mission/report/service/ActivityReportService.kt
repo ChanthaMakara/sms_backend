@@ -10,6 +10,7 @@ import com.onemore.mission.report.repository.ActivityReportRepository
 import com.onemore.mission.security.CustomUserDetails
 import com.onemore.mission.user.domain.UserRole
 import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Transactional
 import java.time.Instant
 import java.time.LocalDate
 
@@ -19,10 +20,21 @@ class ActivityReportService(
     private val activityReportMapper: ActivityReportMapper
 ) {
 
+    @Transactional
     fun createReport(
         missionId: Long,
         request: CreateActivityReportRequest
     ): ActivityReportResponse {
+
+        if (missionId <= 0) {
+            throw IllegalArgumentException("Invalid mission ID")
+        }
+
+        if (request.travelStartDate.isAfter(request.travelEndDate)) {
+            throw IllegalArgumentException(
+                "Travel start date cannot be after travel end date"
+            )
+        }
 
         val report = ActivityReport(
             missionId = missionId,
@@ -44,57 +56,121 @@ class ActivityReportService(
             updatedAt = Instant.now()
         )
 
-        val savedReport = activityReportRepository.save(report)
-
-        return activityReportMapper.toResponse(savedReport)
+        return activityReportMapper.toResponse(
+            activityReportRepository.save(report)
+        )
     }
 
-    fun getReportsByMissionId(missionId: Long): List<ActivityReportResponse> {
+    @Transactional(readOnly = true)
+    fun getReportsByMissionId(
+        missionId: Long
+    ): List<ActivityReportResponse> {
+
         return activityReportRepository
             .findByMissionId(missionId)
+            .sortedByDescending { it.createdAt }
             .map(activityReportMapper::toResponse)
     }
 
+    @Transactional(readOnly = true)
     fun getAllReports(): List<ActivityReportResponse> {
+
         return activityReportRepository
             .findAll()
             .sortedByDescending { it.createdAt }
             .map(activityReportMapper::toResponse)
     }
 
-    fun updateStatus(reportId: Long, status: String): ActivityReportResponse {
-        val report = activityReportRepository.findById(reportId)
-            .orElseThrow { IllegalArgumentException("Activity report not found: $reportId") }
+    @Transactional
+    fun updateReport(
+        missionId: Long,
+        reportId: Long,
+        request: CreateActivityReportRequest
+    ): ActivityReportResponse {
 
-        report.status = parseStatus(status)
+        val report = activityReportRepository
+            .findById(reportId)
+            .orElseThrow {
+                IllegalArgumentException(
+                    "Activity report not found: $reportId"
+                )
+            }
+
+        if (report.missionId != missionId) {
+            throw IllegalArgumentException(
+                "Activity report does not belong to mission: $missionId"
+            )
+        }
+
+        if (report.status != ActivityReportStatus.DRAFT) {
+            throw IllegalStateException(
+                "Only draft reports can be updated"
+            )
+        }
+
+        if (request.travelStartDate.isAfter(request.travelEndDate)) {
+            throw IllegalArgumentException(
+                "Travel start date cannot be after travel end date"
+            )
+        }
+
+        report.requesterName = request.requesterName
+        report.requesterId = request.requesterId
+        report.position = request.position
+        report.function = request.function
+        report.business = request.business
+        report.basedLocation = request.basedLocation
+        report.destinationLocation = request.destinationLocation
+        report.travelStartDate = request.travelStartDate
+        report.travelEndDate = request.travelEndDate
+        report.travelObjectives = request.travelObjectives
+        report.achievedResults = request.achievedResults
+        report.nextPlan = request.nextPlan
+        report.attachedDocuments = request.attachedDocuments
+        report.requesterSignatureDate = request.requesterSignatureDate
         report.updatedAt = Instant.now()
 
-        return activityReportMapper.toResponse(activityReportRepository.save(report))
+        return activityReportMapper.toResponse(
+            activityReportRepository.save(report)
+        )
     }
 
+    @Transactional
     fun addComment(
         reportId: Long,
         request: ActivityReportCommentRequest,
         userDetails: CustomUserDetails
     ): ActivityReportResponse {
-        val report = activityReportRepository.findById(reportId)
-            .orElseThrow { IllegalArgumentException("Activity report not found: $reportId") }
 
-        val roles = userDetails.authorities.map { it.authority }
+        val report = activityReportRepository
+            .findById(reportId)
+            .orElseThrow {
+                IllegalArgumentException(
+                    "Activity report not found: $reportId"
+                )
+            }
+
+        val roles = userDetails.authorities
+            .map { it.authority }
 
         when {
-            roles.contains(UserRole.ROLE_FUNCTION_MANAGER.name) -> {
+            roles.contains(UserRole.ROLE_FUNCTION_MANAGER.name) ||
+            roles.contains(UserRole.ROLE_ADMIN.name) -> {
+
                 report.functionManagerComment = request.comment
                 report.functionManagerSignatureDate = LocalDate.now()
             }
 
             roles.contains(UserRole.ROLE_BIZOPS.name) -> {
+
                 report.bizOpsComment = request.comment
                 report.bizOpsSignatureDate = LocalDate.now()
             }
 
             else -> {
-                throw IllegalStateException("User is not authorized to comment on activity reports")
+                throw IllegalStateException(
+                    "User is not authorized to comment on activity reports"
+                )
             }
         }
 
@@ -105,11 +181,64 @@ class ActivityReportService(
         )
     }
 
-    private fun parseStatus(value: String): ActivityReportStatus {
-        return try {
-            ActivityReportStatus.valueOf(value.uppercase())
+    @Transactional
+    fun updateStatus(
+        reportId: Long,
+        status: String
+    ): ActivityReportResponse {
+
+        val report = activityReportRepository
+            .findById(reportId)
+            .orElseThrow {
+                IllegalArgumentException(
+                    "Activity report not found: $reportId"
+                )
+            }
+
+        val newStatus = try {
+            ActivityReportStatus.valueOf(
+                status.uppercase()
+            )
         } catch (ex: IllegalArgumentException) {
-            throw IllegalArgumentException("Invalid status: $value")
+            throw IllegalArgumentException(
+                "Invalid status: $status"
+            )
         }
+
+        report.status = newStatus
+        report.updatedAt = Instant.now()
+
+        return activityReportMapper.toResponse(
+            activityReportRepository.save(report)
+        )
+    }
+
+    @Transactional
+    fun deleteReport(
+        missionId: Long,
+        reportId: Long
+    ) {
+
+        val report = activityReportRepository
+            .findById(reportId)
+            .orElseThrow {
+                IllegalArgumentException(
+                    "Activity report not found: $reportId"
+                )
+            }
+
+        if (report.missionId != missionId) {
+            throw IllegalArgumentException(
+                "Activity report does not belong to mission: $missionId"
+            )
+        }
+
+        if (report.status != ActivityReportStatus.DRAFT) {
+            throw IllegalStateException(
+                "Only draft reports can be deleted"
+            )
+        }
+
+        activityReportRepository.delete(report)
     }
 }

@@ -21,6 +21,10 @@ class ApprovalService(
     private val missionMapper: MissionMapper
 ) {
 
+    companion object {
+        private const val ADMIN_ROLE = "ROLE_ADMIN"
+    }
+
     // Which role is required to approve/reject at each step
     private val stepRoleMap = mapOf(
         ApprovalStep.FUNCTION_MANAGER to "ROLE_FUNCTION_MANAGER",
@@ -164,15 +168,25 @@ class ApprovalService(
             }
     }
 
-        fun getPendingApprovals(userDetails: CustomUserDetails): List<PendingApprovalResponse> {
-        // Find which step(s) this user's roles qualify them to approve
-        val matchingSteps = stepOrder.filter { step ->
-            val requiredRole = stepRoleMap[step]
-            requiredRole != null && userDetails.authorities.contains(SimpleGrantedAuthority(requiredRole))
+    fun getPendingApprovals(userDetails: CustomUserDetails): List<PendingApprovalResponse> {
+        val callerRoles = userDetails.authorities.map { it.authority }.toSet()
+        val isAdmin = ADMIN_ROLE in callerRoles
+
+        // Admin sees every mission currently sitting in ANY approval step.
+        // Everyone else only sees missions sitting at the specific step their role covers.
+        val visibleMissions = if (isAdmin) {
+            stepOrder.flatMap { step -> missionRepository.findByCurrentApprovalStep(step) }
+        } else {
+            val matchingSteps = stepOrder.filter { step ->
+                val requiredRole = stepRoleMap[step]
+                requiredRole != null && requiredRole in callerRoles
+            }
+            matchingSteps.flatMap { step -> missionRepository.findByCurrentApprovalStep(step) }
         }
 
-        return matchingSteps
-            .flatMap { step -> missionRepository.findByCurrentApprovalStep(step) }
+        return visibleMissions
+            .distinctBy { it.id }
+            .sortedBy { it.currentApprovalStep?.let { step -> stepOrder.indexOf(step) } ?: Int.MAX_VALUE }
             .map { mission ->
                 PendingApprovalResponse(
                     missionId = mission.id,
@@ -188,12 +202,15 @@ class ApprovalService(
     }
 
     private fun requireRoleForStep(step: ApprovalStep, userDetails: CustomUserDetails) {
+        val callerRoles = userDetails.authorities.map { it.authority }.toSet()
+
+        // Admin can approve/reject at any step, acting as an override authority.
+        if (ADMIN_ROLE in callerRoles) return
+
         val requiredRole = stepRoleMap[step]
             ?: throw IllegalStateException("No role configured for step: $step")
 
-        val hasRole = userDetails.authorities.contains(SimpleGrantedAuthority(requiredRole))
-
-        if (!hasRole) {
+        if (requiredRole !in callerRoles) {
             throw IllegalStateException("User does not have the required role ($requiredRole) for step: $step")
         }
     }

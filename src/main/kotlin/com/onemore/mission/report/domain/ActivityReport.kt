@@ -69,6 +69,10 @@ class ActivityReport(
     @Column(name = "biz_ops_signature_date")
     var bizOpsSignatureDate: LocalDate? = null,
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 30)
+    var status: ActivityReportStatus = ActivityReportStatus.DRAFT,
+
     @Column(name = "created_at", nullable = false)
     var createdAt: Instant = Instant.now(),
 

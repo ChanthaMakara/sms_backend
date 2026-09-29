@@ -1,6 +1,7 @@
 package com.onemore.mission.common.exception
 
 import com.onemore.mission.common.response.ApiResponse
+import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.security.access.AccessDeniedException
@@ -10,7 +11,7 @@ import org.springframework.security.core.userdetails.UsernameNotFoundException
 import org.springframework.web.bind.MethodArgumentNotValidException
 import org.springframework.web.bind.annotation.ExceptionHandler
 import org.springframework.web.bind.annotation.RestControllerAdvice
-import org.springframework.dao.DataIntegrityViolationException
+import org.springframework.web.servlet.resource.NoResourceFoundException
 
 @RestControllerAdvice
 class GlobalExceptionHandler {
@@ -27,6 +28,13 @@ class GlobalExceptionHandler {
         return ResponseEntity
             .status(HttpStatus.NOT_FOUND)
             .body(ApiResponse.error(ex.message ?: "Resource not found"))
+    }
+
+    @ExceptionHandler(NoResourceFoundException::class)
+    fun handleNoRouteFound(ex: NoResourceFoundException): ResponseEntity<ApiResponse<Nothing>> {
+        return ResponseEntity
+            .status(HttpStatus.NOT_FOUND)
+            .body(ApiResponse.error("No endpoint found for this request"))
     }
 
     @ExceptionHandler(BadCredentialsException::class, UsernameNotFoundException::class)
@@ -69,14 +77,6 @@ class GlobalExceptionHandler {
             .body(ApiResponse.error(message))
     }
 
-    @ExceptionHandler(Exception::class)
-    fun handleGeneral(ex: Exception): ResponseEntity<ApiResponse<Nothing>> {
-        ex.printStackTrace()
-        return ResponseEntity
-            .status(HttpStatus.INTERNAL_SERVER_ERROR)
-            .body(ApiResponse.error("Internal server error: ${ex.message}"))
-    }
-
     @ExceptionHandler(AccessDeniedException::class)
     fun handleAccessDenied(ex: AccessDeniedException): ResponseEntity<ApiResponse<Nothing>> {
         return ResponseEntity
@@ -103,5 +103,13 @@ class GlobalExceptionHandler {
         return ResponseEntity
             .status(HttpStatus.CONFLICT)
             .body(ApiResponse.error("Resource conflict"))
+    }
+
+    @ExceptionHandler(Exception::class)
+    fun handleGeneral(ex: Exception): ResponseEntity<ApiResponse<Nothing>> {
+        ex.printStackTrace()
+        return ResponseEntity
+            .status(HttpStatus.INTERNAL_SERVER_ERROR)
+            .body(ApiResponse.error("Internal server error: ${ex.message}"))
     }
 }

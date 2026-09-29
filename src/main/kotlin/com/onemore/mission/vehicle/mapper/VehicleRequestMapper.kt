@@ -13,8 +13,14 @@ import org.springframework.stereotype.Component
 @Component
 class VehicleRequestMapper {
 
-    fun toEntity(missionId: Long, request: CreateVehicleRequestRequest): VehicleRequest {
-        val jobLevel = request.jobLevel?.let { parseJobLevel(it) }
+    // CREATE
+    fun toEntity(
+        missionId: Long,
+        request: CreateVehicleRequestRequest
+    ): VehicleRequest {
+
+        val jobLevel =
+            request.jobLevel?.let { parseJobLevel(it) }
 
         val vehicleRequest = VehicleRequest(
             missionId = missionId,
@@ -49,7 +55,49 @@ class VehicleRequestMapper {
         return vehicleRequest
     }
 
-    fun toResponse(entity: VehicleRequest): VehicleRequestResponse {
+    // UPDATE
+    fun updateEntity(
+        entity: VehicleRequest,
+        request: CreateVehicleRequestRequest
+    ) {
+
+        entity.requesterName = request.requesterName
+        entity.requesterId = request.requesterId
+        entity.position = request.position
+        entity.function = request.function
+        entity.business = request.business
+        entity.jobLevel =
+            request.jobLevel?.let { parseJobLevel(it) }
+        entity.basedLocation = request.basedLocation
+        entity.destinationLocation = request.destinationLocation
+        entity.travelStartDate = request.travelStartDate
+        entity.travelEndDate = request.travelEndDate
+        entity.travelObjectives = request.travelObjectives
+
+        // Remove old travel details
+        entity.travelDetails.clear()
+
+        // Add new travel details
+        val details = request.travelDetails.map { detail ->
+            VehicleTravelDetail(
+                vehicleRequest = entity,
+                travelDate = detail.date,
+                origin = detail.origin,
+                destination = detail.destination,
+                purposeOfTravel = detail.purposeOfTravel,
+                distanceKm = detail.distanceKm,
+                remarks = detail.remarks
+            )
+        }
+
+        entity.travelDetails.addAll(details)
+    }
+
+    // RESPONSE
+    fun toResponse(
+        entity: VehicleRequest
+    ): VehicleRequestResponse {
+
         return VehicleRequestResponse(
             id = requireNotNull(entity.id),
             missionId = entity.missionId,
@@ -81,11 +129,15 @@ class VehicleRequestMapper {
         )
     }
 
-    private fun parseJobLevel(value: String): JobLevel {
+    private fun parseJobLevel(
+        value: String
+    ): JobLevel {
         return try {
             JobLevel.valueOf(value.uppercase())
         } catch (ex: IllegalArgumentException) {
-            throw BusinessException("Invalid jobLevel: $value")
+            throw BusinessException(
+                "Invalid jobLevel: $value"
+            )
         }
     }
 }

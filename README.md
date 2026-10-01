@@ -1,6 +1,4 @@
-Here’s a clean version that will look good on GitHub.
 
-Just copy everything below and paste it into your README.md:
 Markdown# Mission Management System – Backend
 
 Backend API for the Mission Management System.  

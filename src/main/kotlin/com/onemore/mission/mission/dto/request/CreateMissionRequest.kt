@@ -1,6 +1,7 @@
 package com.onemore.mission.mission.dto.request
 
 import com.onemore.mission.mission.domain.LocationTier
+import com.onemore.mission.mission.domain.MissionType
 import com.onemore.mission.user.domain.JobLevel
 import jakarta.validation.constraints.*
 import java.time.LocalDate
@@ -46,5 +47,9 @@ data class CreateMissionRequest(
 
     val description: String? = null,
 
-    val onBehalfOfUserId: Long? = null
+    val onBehalfOfUserId: Long? = null,
+
+    val missionType: MissionType = MissionType.INDIVIDUAL,
+
+    val participantIds: List<Long> = emptyList()
 )

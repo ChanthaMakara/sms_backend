@@ -2,65 +2,107 @@ package com.onemore.mission.allowance.service
 
 import com.onemore.mission.allowance.repository.AccommodationRateRepository
 import com.onemore.mission.allowance.repository.MealRateRepository
+import com.onemore.mission.mission.domain.MissionParticipant
+import com.onemore.mission.mission.domain.MissionType
+import com.onemore.mission.mission.dto.response.MissionParticipantResponse
 import com.onemore.mission.mission.dto.response.MissionResponse
 import com.onemore.mission.mission.mapper.MissionMapper
+import com.onemore.mission.mission.repository.MissionParticipantRepository
 import com.onemore.mission.mission.repository.MissionRepository
 import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Transactional
+import java.math.BigDecimal
 
 @Service
 class AllowanceService(
     private val missionRepository: MissionRepository,
     private val mealRateRepository: MealRateRepository,
     private val accommodationRateRepository: AccommodationRateRepository,
-    private val missionMapper: MissionMapper
+    private val missionMapper: MissionMapper,
+    private val participantRepository: MissionParticipantRepository
 ) {
 
+    @Transactional
     fun calculateAndSave(missionId: Long): MissionResponse {
         val mission = missionRepository.findById(missionId)
             .orElseThrow {
                 IllegalArgumentException("Mission not found with id: $missionId")
             }
 
-        val mealRate = mealRateRepository.findByLocationTierAndJobLevel(
-            mission.locationTier,
-            mission.jobLevel
-        ) ?: throw IllegalStateException(
-            "No meal rate configured for locationTier=${mission.locationTier}, jobLevel=${mission.jobLevel}"
-        )
+        val participants = participantRepository.findAllByMissionIdIn(listOf(missionId))
+        if (participants.isEmpty()) {
+            throw IllegalStateException("Mission $missionId has no participants.")
+        }
 
-        val accommodationRate = accommodationRateRepository.findByLocationTierAndJobLevel(
-            mission.locationTier,
-            mission.jobLevel
-        ) ?: throw IllegalStateException(
-            "No accommodation rate configured for locationTier=${mission.locationTier}, jobLevel=${mission.jobLevel}"
-        )
+        val days = mission.numberOfTravelDays
+        val nights = (days - 1).coerceAtLeast(0)
+        val daysBd = days.toBigDecimal()
+        val nightsBd = nights.toBigDecimal()
+        val isIndividual = mission.missionType == MissionType.INDIVIDUAL
 
-        val mealQuantity = mission.numberOfTravelDays
-        val nights = (mission.numberOfTravelDays - 1).coerceAtLeast(0)
+        var sumBreakfast = BigDecimal.ZERO
+        var sumLunch = BigDecimal.ZERO
+        var sumDinner = BigDecimal.ZERO
+        var sumAccommodation = BigDecimal.ZERO
 
-        mission.breakfastAmount = mealRate.breakfastAmount
-        mission.breakfastQuantity = mealQuantity
-        mission.breakfastTotal = mealRate.breakfastAmount.multiply(mealQuantity.toBigDecimal())
+        if (!isIndividual) {
+            mission.breakfastAmount = null
+            mission.lunchAmount = null
+            mission.dinnerAmount = null
+            mission.accommodationAmountPerNight = null
+        }
 
-        mission.lunchAmount = mealRate.lunchAmount
-        mission.lunchQuantity = mealQuantity
-        mission.lunchTotal = mealRate.lunchAmount.multiply(mealQuantity.toBigDecimal())
+        for (p in participants) {
+            val mealRate = mealRateRepository.findByLocationTierAndJobLevel(
+                mission.locationTier, p.jobLevel
+            ) ?: throw IllegalStateException(
+                "No meal rate configured for locationTier=${mission.locationTier}, jobLevel=${p.jobLevel} (${p.fullName})"
+            )
 
-        mission.dinnerAmount = mealRate.dinnerAmount
-        mission.dinnerQuantity = mealQuantity
-        mission.dinnerTotal = mealRate.dinnerAmount.multiply(mealQuantity.toBigDecimal())
+            val accommodationRate = accommodationRateRepository.findByLocationTierAndJobLevel(
+                mission.locationTier, p.jobLevel
+            ) ?: throw IllegalStateException(
+                "No accommodation rate configured for locationTier=${mission.locationTier}, jobLevel=${p.jobLevel} (${p.fullName})"
+            )
 
-        mission.accommodationAmountPerNight = accommodationRate.amountPerNight
+            p.breakfastTotal = mealRate.breakfastAmount.multiply(daysBd)
+            p.lunchTotal = mealRate.lunchAmount.multiply(daysBd)
+            p.dinnerTotal = mealRate.dinnerAmount.multiply(daysBd)
+            p.accommodationTotal = accommodationRate.amountPerNight.multiply(nightsBd)
+            p.totalExpense = p.breakfastTotal.add(p.lunchTotal).add(p.dinnerTotal).add(p.accommodationTotal)
+
+            sumBreakfast = sumBreakfast.add(p.breakfastTotal)
+            sumLunch = sumLunch.add(p.lunchTotal)
+            sumDinner = sumDinner.add(p.dinnerTotal)
+            sumAccommodation = sumAccommodation.add(p.accommodationTotal)
+
+            if (isIndividual) {
+                mission.breakfastAmount = mealRate.breakfastAmount
+                mission.lunchAmount = mealRate.lunchAmount
+                mission.dinnerAmount = mealRate.dinnerAmount
+                mission.accommodationAmountPerNight = accommodationRate.amountPerNight
+            }
+        }
+        participantRepository.saveAll(participants)
+
+        val headcount = participants.size
+        mission.breakfastQuantity = days * headcount
+        mission.lunchQuantity = days * headcount
+        mission.dinnerQuantity = days * headcount
         mission.numberOfNightStay = nights
-        mission.accommodationTotal = accommodationRate.amountPerNight.multiply(nights.toBigDecimal())
 
-        mission.totalExpense = mission.breakfastTotal!!
-            .add(mission.lunchTotal!!)
-            .add(mission.dinnerTotal!!)
-            .add(mission.accommodationTotal!!)
+        mission.breakfastTotal = sumBreakfast
+        mission.lunchTotal = sumLunch
+        mission.dinnerTotal = sumDinner
+        mission.accommodationTotal = sumAccommodation
+        mission.totalExpense = sumBreakfast.add(sumLunch).add(sumDinner).add(sumAccommodation)
 
         val savedMission = missionRepository.save(mission)
 
-        return missionMapper.toResponse(savedMission)
+        val sorted = participants
+            .sortedWith(compareByDescending<MissionParticipant> { it.requester }.thenBy { it.fullName })
+            .map(MissionParticipantResponse::from)
+
+        return missionMapper.toResponse(savedMission, sorted)
     }
 }

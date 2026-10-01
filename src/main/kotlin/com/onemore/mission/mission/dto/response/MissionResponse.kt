@@ -3,6 +3,7 @@ package com.onemore.mission.mission.dto.response
 import com.onemore.mission.mission.domain.ApprovalStep
 import com.onemore.mission.mission.domain.LocationTier
 import com.onemore.mission.mission.domain.MissionStatus
+import com.onemore.mission.mission.domain.MissionType
 import com.onemore.mission.user.domain.JobLevel
 import java.math.BigDecimal
 import java.time.Instant
@@ -52,5 +53,8 @@ data class MissionResponse(
     val currentApprovalStep: ApprovalStep?,
 
     val createdAt: Instant,
-    val updatedAt: Instant
+    val updatedAt: Instant,
+
+    val missionType: MissionType = MissionType.INDIVIDUAL,
+    val participants: List<MissionParticipantResponse> = emptyList()
 )

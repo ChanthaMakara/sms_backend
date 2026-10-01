@@ -1,21 +1,28 @@
 package com.onemore.mission.mission.service
 
+import com.onemore.mission.allowance.service.AllowanceService
 import com.onemore.mission.mission.domain.Mission
 import com.onemore.mission.mission.domain.MissionStatus
+import com.onemore.mission.mission.domain.MissionType
 import com.onemore.mission.mission.dto.request.CreateMissionRequest
+import com.onemore.mission.mission.dto.request.UpdateMissionParticipantsRequest
 import com.onemore.mission.mission.dto.request.UpdateMissionRequest
+import com.onemore.mission.mission.dto.response.MissionParticipantResponse
 import com.onemore.mission.mission.dto.response.MissionResponse
 import com.onemore.mission.mission.mapper.MissionMapper
 import com.onemore.mission.mission.repository.MissionRepository
 import com.onemore.mission.user.repository.UserRepository
 import org.springframework.security.access.AccessDeniedException
 import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Transactional
 
 @Service
 class MissionService(
     private val missionRepository: MissionRepository,
     private val missionMapper: MissionMapper,
-    private val userRepository: UserRepository
+    private val userRepository: UserRepository,
+    private val participantService: MissionParticipantService,
+    private val allowanceService: AllowanceService
 ) {
 
     companion object {
@@ -25,6 +32,7 @@ class MissionService(
         )
     }
 
+    @Transactional
     fun create(
         request: CreateMissionRequest,
         requesterId: Long,
@@ -50,6 +58,7 @@ class MissionService(
 
         val mission = Mission(
             missionCode = "MIS-${System.currentTimeMillis()}",
+            missionType = request.missionType,
             requesterId = finalRequesterId,
             requesterName = finalRequesterName,
             position = request.position,
@@ -69,29 +78,55 @@ class MissionService(
         )
 
         val savedMission = missionRepository.save(mission)
+        participantService.rebuild(savedMission, request.participantIds)
 
-        return missionMapper.toResponse(savedMission)
+        return toResponse(savedMission)
     }
 
     fun getById(id: Long): MissionResponse {
-        val mission = missionRepository.findById(id)
-            .orElseThrow {
-                IllegalArgumentException("Mission not found with id: $id")
-            }
-
-        return missionMapper.toResponse(mission)
+        val mission = findMission(id)
+        return toResponse(mission)
     }
 
     fun getAll(): List<MissionResponse> {
-        return missionRepository.findAll()
-            .map(missionMapper::toResponse)
+        val missions = missionRepository.findAll()
+        val byMission = participantService.listForMissions(missions.map { it.id }).groupBy { it.missionId }
+        return missions.map { m ->
+            missionMapper.toResponse(
+                m,
+                (byMission[m.id] ?: emptyList()).map(MissionParticipantResponse::from)
+            )
+        }
+    }
+
+    fun getParticipants(id: Long): List<MissionParticipantResponse> {
+        findMission(id)
+        return participantService.list(id).map(MissionParticipantResponse::from)
+    }
+
+    @Transactional
+    fun updateParticipants(
+        id: Long,
+        request: UpdateMissionParticipantsRequest,
+        callerId: Long,
+        callerRoles: List<String>
+    ): List<MissionParticipantResponse> {
+        val mission = findMission(id)
+
+        checkOwnerOrAdminWhileDraft(mission, callerId, callerRoles, action = "change participants of")
+
+        if (mission.missionType != MissionType.GROUP) {
+            throw IllegalArgumentException("Only GROUP missions can have extra participants.")
+        }
+
+        participantService.rebuild(mission, request.participantIds)
+        allowanceService.calculateAndSave(id)
+
+        return participantService.list(id).map(MissionParticipantResponse::from)
     }
 
     fun update(id: Long, request: UpdateMissionRequest, callerId: Long, callerRoles: List<String>): MissionResponse {
-        val mission = missionRepository.findById(id)
-            .orElseThrow {
-                IllegalArgumentException("Mission not found with id: $id")
-            }
+        val mission = findMission(id)
 
         checkOwnerOrAdminWhileDraft(mission, callerId, callerRoles, action = "update")
 
@@ -112,19 +147,26 @@ class MissionService(
 
         val savedMission = missionRepository.save(mission)
 
-        return missionMapper.toResponse(savedMission)
+        return toResponse(savedMission)
     }
 
     fun delete(id: Long, callerId: Long, callerRoles: List<String>) {
-        val mission = missionRepository.findById(id)
-            .orElseThrow {
-                IllegalArgumentException("Mission not found with id: $id")
-            }
+        val mission = findMission(id)
 
         checkOwnerOrAdminWhileDraft(mission, callerId, callerRoles, action = "delete")
 
         missionRepository.delete(mission)
     }
+
+    private fun findMission(id: Long): Mission =
+        missionRepository.findById(id)
+            .orElseThrow { IllegalArgumentException("Mission not found with id: $id") }
+
+    private fun toResponse(mission: Mission): MissionResponse =
+        missionMapper.toResponse(
+            mission,
+            participantService.list(mission.id).map(MissionParticipantResponse::from)
+        )
 
     private fun checkOwnerOrAdminWhileDraft(
         mission: Mission,

@@ -18,6 +18,10 @@ class Mission(
     @Column(name = "mission_code", unique = true, length = 50)
     var missionCode: String? = null,
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "mission_type", nullable = false, length = 20)
+    var missionType: MissionType = MissionType.INDIVIDUAL,
+
     @Column(name = "requester_id", nullable = false)
     var requesterId: Long,
 

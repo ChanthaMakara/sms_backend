@@ -1,7 +1,9 @@
 package com.onemore.mission.mission.controller
 
 import com.onemore.mission.mission.dto.request.CreateMissionRequest
+import com.onemore.mission.mission.dto.request.UpdateMissionParticipantsRequest
 import com.onemore.mission.mission.dto.request.UpdateMissionRequest
+import com.onemore.mission.mission.dto.response.MissionParticipantResponse
 import com.onemore.mission.mission.dto.response.MissionResponse
 import com.onemore.mission.mission.service.MissionService
 import com.onemore.mission.security.CustomUserDetails
@@ -82,5 +84,32 @@ class MissionController(
         )
 
         return ResponseEntity.noContent().build()
+    }
+
+    @GetMapping("/{id}/participants")
+    fun getParticipants(
+        @PathVariable id: Long
+    ): ResponseEntity<List<MissionParticipantResponse>> {
+
+        return ResponseEntity.ok(
+            missionService.getParticipants(id)
+        )
+    }
+
+    @PutMapping("/{id}/participants")
+    fun updateParticipants(
+        @PathVariable id: Long,
+        @Valid @RequestBody request: UpdateMissionParticipantsRequest,
+        @AuthenticationPrincipal userDetails: CustomUserDetails
+    ): ResponseEntity<List<MissionParticipantResponse>> {
+
+        return ResponseEntity.ok(
+            missionService.updateParticipants(
+                id = id,
+                request = request,
+                callerId = userDetails.id,
+                callerRoles = userDetails.authorities.map { it.authority }
+            )
+        )
     }
 }

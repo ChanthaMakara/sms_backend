@@ -1,16 +1,18 @@
 package com.onemore.mission.mission.mapper
 
 import com.onemore.mission.mission.domain.Mission
+import com.onemore.mission.mission.dto.response.MissionParticipantResponse
 import com.onemore.mission.mission.dto.response.MissionResponse
 import org.springframework.stereotype.Component
 
 @Component
 class MissionMapper {
 
-    fun toResponse(mission: Mission): MissionResponse {
+    fun toResponse(mission: Mission, participants: List<MissionParticipantResponse> = emptyList()): MissionResponse {
         return MissionResponse(
             id = mission.id,
             missionCode = mission.missionCode,
+            missionType = mission.missionType,
             requesterId = mission.requesterId,
             requesterName = mission.requesterName,
             position = mission.position,
@@ -51,7 +53,8 @@ class MissionMapper {
             currentApprovalStep = mission.currentApprovalStep,
 
             createdAt = mission.createdAt,
-            updatedAt = mission.updatedAt
+            updatedAt = mission.updatedAt,
+            participants = participants
         )
     }
 }

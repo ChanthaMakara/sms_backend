@@ -1,4 +1,4 @@
-package com.onemore.mission.analytics.dto.response
+﻿package com.onemore.mission.analytics.dto.response
 
 data class MissionsSummaryResponse(
     val total: Long,
@@ -6,6 +6,7 @@ data class MissionsSummaryResponse(
     val approved: Long,
     val inProgress: Long,
     val completed: Long,
+    val reportSubmitted: Long,
     val rejected: Long,
     val changeVsLastMonthPct: Double,
     val trend: List<MonthlyMissionTrend>,

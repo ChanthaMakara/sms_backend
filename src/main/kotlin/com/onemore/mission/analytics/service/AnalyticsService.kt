@@ -1,4 +1,4 @@
-package com.onemore.mission.analytics.service
+﻿package com.onemore.mission.analytics.service
 
 import com.onemore.mission.analytics.dto.response.AllowanceSpendResponse
 import com.onemore.mission.analytics.dto.response.ApprovalTurnaroundResponse
@@ -17,6 +17,10 @@ import org.springframework.stereotype.Service
 import java.math.BigDecimal
 import java.time.Duration
 import java.time.Instant
+import java.time.YearMonth
+import java.time.ZoneId
+import java.time.format.TextStyle
+import java.util.Locale
 
 @Service
 class AnalyticsService(
@@ -59,11 +63,39 @@ class AnalyticsService(
             approved = approved,
             inProgress = pending, // TODO: decide how "in progress" should differ from "pending"
             completed = completed,
+            reportSubmitted = byStatus[MissionStatus.REPORT_SUBMITTED] ?: 0L,
             rejected = rejected,
-            changeVsLastMonthPct = 0.0, // TODO: needs a month-over-month comparison query
-            trend = emptyList(), // TODO: needs a query grouping missions by month
+            changeVsLastMonthPct = monthOverMonthPct(),
+            trend = buildTrend(),
             byDepartment = emptyList() // TODO: no "department" field exists yet
         )
+    }
+
+    private val trendZone: ZoneId = ZoneId.systemDefault()
+
+    private fun monthOf(instant: Instant): YearMonth = YearMonth.from(instant.atZone(trendZone))
+
+    /** Last 6 months: missions submitted (non-draft, by created month) vs completed (by last update month). */
+    private fun buildTrend(months: Int = 6): List<MonthlyMissionTrend> {
+        val missions = missionRepository.findAll()
+        val completedStatuses = setOf(MissionStatus.SETTLED, MissionStatus.REPORT_SUBMITTED)
+        val current = YearMonth.now(trendZone)
+        return (months - 1 downTo 0).map { back ->
+            val ym = current.minusMonths(back.toLong())
+            MonthlyMissionTrend(
+                month = ym.month.getDisplayName(TextStyle.SHORT, Locale.ENGLISH),
+                submitted = missions.count { it.status != MissionStatus.DRAFT && monthOf(it.createdAt) == ym }.toLong(),
+                completed = missions.count { it.status in completedStatuses && monthOf(it.updatedAt) == ym }.toLong()
+            )
+        }
+    }
+
+    private fun monthOverMonthPct(): Double {
+        val missions = missionRepository.findAll()
+        val current = YearMonth.now(trendZone)
+        val thisMonth = missions.count { monthOf(it.createdAt) == current }
+        val lastMonth = missions.count { monthOf(it.createdAt) == current.minusMonths(1) }
+        return if (lastMonth == 0) 0.0 else (thisMonth - lastMonth) * 100.0 / lastMonth
     }
 
     fun getAllowanceSpend(): AllowanceSpendResponse {

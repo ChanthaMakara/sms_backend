@@ -1,4 +1,4 @@
-package com.onemore.mission.report.controller
+﻿package com.onemore.mission.report.controller
 
 import com.onemore.mission.report.dto.request.ActivityReportCommentRequest
 import com.onemore.mission.report.dto.request.CreateActivityReportRequest
@@ -7,6 +7,7 @@ import com.onemore.mission.report.service.ActivityReportService
 import com.onemore.mission.security.CustomUserDetails
 import io.swagger.v3.oas.annotations.security.SecurityRequirement
 import org.springframework.http.HttpStatus
+import org.springframework.security.access.prepost.PreAuthorize
 import org.springframework.security.core.annotation.AuthenticationPrincipal
 import org.springframework.web.bind.annotation.*
 
@@ -42,6 +43,7 @@ class ActivityReportController(
 
     // ADD COMMENT
     @PostMapping("/{reportId}/comment")
+    @PreAuthorize("hasAnyAuthority('ROLE_FUNCTION_MANAGER','ROLE_BIZOPS','ROLE_ADMIN')")
     fun addComment(
         @PathVariable reportId: Long,
         @RequestBody request: ActivityReportCommentRequest,

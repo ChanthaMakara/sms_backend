@@ -60,3 +60,7 @@ kotlin {
 tasks.withType<Test> {
     useJUnitPlatform()
 } 
+
+springBoot {
+    mainClass.set("com.onemore.mission.MissionManagementBackendApplicationKt")
+}

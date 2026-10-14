@@ -1,4 +1,4 @@
-package com.onemore.mission.config
+﻿package com.onemore.mission.config
 
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
@@ -12,15 +12,14 @@ class WebConfig {
     @Bean
     fun corsConfigurationSource(): CorsConfigurationSource {
         val configuration = CorsConfiguration().apply {
-            allowedOrigins = listOf(
-                "http://localhost:5173",   // Vite (your current frontend)
-                "http://localhost:3000",   // CRA (just in case)
-                "http://localhost:8443"    // keep the old one if you still use it
+            // Allow any localhost port (Flutter web, Vite, etc.)
+            allowedOriginPatterns = listOf(
+                "http://localhost:*",
+                "http://127.0.0.1:*"
             )
             allowedMethods = listOf("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
             allowedHeaders = listOf("*")
             allowCredentials = true
-            // Optional but recommended
             maxAge = 3600L
         }
         val source = UrlBasedCorsConfigurationSource()

@@ -52,8 +52,13 @@ class ApprovalService(
     fun submit(missionId: Long, userDetails: CustomUserDetails): MissionResponse {
         val mission = getMissionOrThrow(missionId)
 
-        if (mission.requesterId != userDetails.id) {
-            throw IllegalStateException("Only the requester can submit this mission")
+        val callerRoles = userDetails.authorities.map { it.authority }.toSet()
+        val isAdmin = ADMIN_ROLE in callerRoles
+        val isRequester = mission.requesterId == userDetails.id
+
+        // Allow requester OR admin
+        if (!isRequester && !isAdmin) {
+            throw IllegalStateException("Only the requester or admin can submit this mission")
         }
 
         if (mission.status != MissionStatus.DRAFT) {
@@ -128,8 +133,13 @@ class ApprovalService(
     fun cancel(missionId: Long, userDetails: CustomUserDetails): MissionResponse {
         val mission = getMissionOrThrow(missionId)
 
-        if (mission.requesterId != userDetails.id) {
-            throw IllegalStateException("Only the requester can cancel this mission")
+        val callerRoles = userDetails.authorities.map { it.authority }.toSet()
+        val isAdmin = ADMIN_ROLE in callerRoles
+        val isRequester = mission.requesterId == userDetails.id
+
+        // Allow requester OR admin
+        if (!isRequester && !isAdmin) {
+            throw IllegalStateException("Only the requester or admin can cancel this mission")
         }
 
         val nonCancellableStatuses = setOf(
